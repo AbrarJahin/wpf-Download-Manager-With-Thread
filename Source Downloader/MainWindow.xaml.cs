@@ -2,6 +2,7 @@
 using System.IO;
 using System.Net;
 using System.Text.RegularExpressions;
+using System.Timers;
 using System.Windows;
 
 namespace Source_Downloader
@@ -11,53 +12,88 @@ namespace Source_Downloader
     /// </summary>
     public partial class MainWindow : Window
     {
-        private string downloadFileLocation = AppDomain.CurrentDomain.BaseDirectory + "download.txt";
+        private readonly String downloadFileLocation = AppDomain.CurrentDomain.BaseDirectory + "download.txt";
+        private String downloadedFileString = string.Empty;
+        private DateTime lastClicked;
+        private Timer timer = new Timer();
 
         public MainWindow()
         {
             InitializeComponent();
+
+            // Set the Interval to 100 ms
+            timer.Interval = 100;
+
+            // Hook up the Elapsed event for the timer
+            timer.Elapsed += updateDownloadTimer;
         }
 
         private void bDownloadClick(object sender, RoutedEventArgs e)
         {
             bDownload.IsEnabled = false;
-            String downloadedSourceString = string.Empty;
+            calculationResultTitle.Visibility = Visibility.Visible;
+            calculationResultValue.Visibility = Visibility.Visible;
+            downloadTime.Visibility = Visibility.Visible;
+            lastClicked = DateTime.Now;
+            startDownloadFile(downloadUrl.Text);
+        }
 
-            // Create a New 'HttpWebRequest' object .
-            HttpWebRequest myHttpWebRequest = (HttpWebRequest)WebRequest.Create(downloadUrl.Text);
-            //myHttpWebRequest.AddRange(50, 51);
-
-            // Assign the response object of 'HttpWebRequest' to a 'HttpWebResponse' variable.
-            HttpWebResponse myHttpWebResponse = (HttpWebResponse)myHttpWebRequest.GetResponse();
-
-            MessageBox.Show(myHttpWebResponse.ContentLength.ToString());
-
-            // Display the contents of the page to the console.
-            Stream streamResponse = myHttpWebResponse.GetResponseStream();
-            StreamReader streamRead = new StreamReader(streamResponse);
-            Char[] readBuffer = new Char[256];
-            int count = streamRead.Read(readBuffer, 0, 256);
-
-            while (count > 0)
+        private void startDownloadFile(string url)
+        {
+            try
             {
-                String outputData = new String(readBuffer, 0, count);
-                //Console.WriteLine(outputData);
-                downloadedSourceString += outputData;
-                count = streamRead.Read(readBuffer, 0, 256);
+                downloadProgress.Value = 0;
+                downloadProgress.Visibility = Visibility.Visible;
+
+                // Start the timer.
+                timer.Enabled = true;
+
+                WebClient webClient = new WebClient();
+                webClient.DownloadStringCompleted += wcDownloadStringDownloadCompleted;
+
+                //Update UI with download progress
+                webClient.DownloadProgressChanged += wcDownloadProgressChanged;
+
+                webClient.DownloadStringAsync(new Uri(url), downloadFileLocation);
             }
+            catch (Exception e)
+            {
+                // Stop the timer.
+                timer.Enabled = false;
 
-            // Release the response object resources.
-            streamRead.Close();
-            streamResponse.Close();
-            myHttpWebResponse.Close();
+                MessageBox.Show(e.ToString());
+                bDownload.IsEnabled = true;
+                downloadProgress.Visibility = Visibility.Hidden;
+            }
+        }
 
+        private void updateDownloadTimer(object sender, ElapsedEventArgs e)
+        {
+            Dispatcher.Invoke((Action)delegate () {
+                downloadTime.Text = "Download Time - " + (DateTime.Now - lastClicked).TotalSeconds.ToString() + " s";
+            });
+        }
+
+        private void wcDownloadProgressChanged(object sender, DownloadProgressChangedEventArgs e)
+        {
+            downloadProgress.Value = e.ProgressPercentage;
+            //downloadTime.Text = "Download Time - "+(DateTime.Now - lastClicked).TotalSeconds.ToString()+ " s";
+        }
+
+        void wcDownloadStringDownloadCompleted(object sender, DownloadStringCompletedEventArgs downloadArgument)
+        {
+            // Stop the timer.
+            timer.Enabled = false;
+
+            downloadedFileString = downloadArgument.Result;
             // Store the result
-            File.WriteAllText(downloadFileLocation, downloadedSourceString);
+            File.WriteAllText(downloadFileLocation, downloadedFileString);
 
             //Now calculate total no of divs
-            var matches = Regex.Matches(downloadedSourceString.ToLower(), "</div>");
+            var matches = Regex.Matches(downloadedFileString.ToLower(), "</div>");
             calculationResultValue.Text = matches.Count.ToString();
 
+            downloadProgress.Visibility = Visibility.Hidden;
             bDownload.IsEnabled = true;
             MessageBox.Show("Download Completed");
         }

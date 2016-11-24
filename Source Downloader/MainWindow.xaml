@@ -8,6 +8,7 @@
         Title="Source Downloader"
         Height="109.804"
         Width="525"
+        Icon="icon.ico"
         ResizeMode="NoResize"
     >
     <Grid>
